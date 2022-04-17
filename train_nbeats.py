@@ -5,6 +5,7 @@ from darts.dataprocessing.transformers import Scaler
 
 import pandas as pd
 import numpy as np
+from sklearn.metrics import accuracy_score, confusion_matrix
 import torch
 import sys
 from torch import nn
@@ -110,6 +111,26 @@ def train(model:MyNBeatsModel, train_x, train_y, epoch, lr, batchsize):
         train_loss = np.mean(train_loss)
         print("\nEnd of Epoch {}, average train loss: {:.6f} ".format(e, train_loss), file=sys.stderr)
 
+def test(model:MyNBeatsModel, test_x, test_y):
+    model.eval()
+
+    for batch_x, batch_y in generate_batch(test_x, test_y, 50):
+        batch_x = torch.from_numpy(batch_x)
+        batch_x.to(DEVICE)
+        logit = model(batch_x)
+
+        logit_stack = []
+        for batch_logit in logit:
+            b_numpy = batch_logit.detach().cpu().numpy()
+            logit_stack.append(b_numpy)
+        
+        acc_nday = []
+        for ls, by in zip(logit_stack, batch_y):
+            pred = np.argmax(ls, axis=-1)
+            acc = accuracy_score(by, pred)
+            acc_nday.append(acc)
+
+    return acc_nday
 
 
 def main():
@@ -136,9 +157,9 @@ def main():
     for com in train_stock_ts.keys():
         train_stock_numpys.append( timeseries_to_numpy(train_stock_ts[com], train_cov_ts[com]) )
 
-    # test_stock_numpys = []
-    # for com in train_stock_ts.keys():
-    #     test_stock_numpys.append( timeseries_to_numpy(test_stock_ts[com], test_cov_ts[com]) )
+    test_stock_numpys = []
+    for com in train_stock_ts.keys():
+        test_stock_numpys.append( timeseries_to_numpy(test_stock_ts[com], test_cov_ts[com]) )
 
     # Set Hyper-parameters
     input_step = 30
@@ -156,8 +177,21 @@ def main():
     train_x = np.concatenate(train_x, 0, dtype=np.float32)
     train_y = np.concatenate(train_y, 0, dtype=int)
 
+    # Create testing data that ready to feed into model
+    test_x = []
+    test_y = []
+    for com_seq in test_stock_numpys:
+        _x, _y = create_data_and_label(com_seq.squeeze(-1), input_step=input_step, nday=nday)
+        test_x.append(_x)
+        test_y.append(_y)
+
+    test_x = np.concatenate(test_x, 0, dtype=np.float32)
+    test_y = np.concatenate(test_y, 0, dtype=int)
+
     assert len(train_x) == len(train_y)
+    assert len(test_x) == len(test_y)
     print("Number of training samples: {}".format(len(train_x)), file=sys.stderr)
+    print("Number of testing samples: {}".format(len(test_x)), file=sys.stderr)
     
     model = MyNBeatsModel(
         input_chunk_length=input_step,
@@ -173,7 +207,11 @@ def main():
     model.to(DEVICE)
 
     # Train
-    train(model, train_x, train_y, epoch=10, lr=1e-4, batchsize=32)
+    # train(model, train_x, train_y, epoch=10, lr=1e-4, batchsize=32) # Hypter parameter
+
+    # Test
+    acc_nday = test(model, test_x, test_y)
+    print(acc_nday)
 
 
 if __name__ == "__main__":

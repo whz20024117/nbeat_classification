@@ -5,6 +5,8 @@ from torch import nn
 import torch
 from torch.nn import functional as F
 
+import sys
+
 class MyNBeatsModel(nn.Module):
     def __init__(self,
         input_chunk_length: int,
@@ -124,6 +126,14 @@ class MyNBeatsModel(nn.Module):
             losses.append(self.loss_fn(_y, _t))
         
         return torch.mean(torch.stack(losses))
+
+    def save(self, savepath):
+        print("Saving model to {}".format(savepath), file=sys.stderr)
+        torch.save(self.state_dict(), savepath)
+
+    def load(self, savepath):
+        print("Loading model from {}".format(savepath), file=sys.stderr)
+        self.load_state_dict(torch.load(savepath))
 
 
 def generate_batch(x, y, bs):
