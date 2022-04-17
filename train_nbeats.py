@@ -14,6 +14,7 @@ import os
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 STOCK_SCALER = None
 COV_SCALER = None
+SAVEPATH = "model_save/save1.pth"
 
 def timeseries_to_numpy(target_ts, cov_ts):
     # Shape: N, variable, feature
@@ -113,8 +114,11 @@ def train(model:MyNBeatsModel, train_x, train_y, epoch, lr, batchsize):
 
 def test(model:MyNBeatsModel, test_x, test_y):
     model.eval()
-
-    for batch_x, batch_y in generate_batch(test_x, test_y, 50):
+    bs = 50
+    
+    overall_acc = []
+    
+    for batch_x, batch_y in generate_batch(test_x, test_y, bs):
         batch_x = torch.from_numpy(batch_x)
         batch_x.to(DEVICE)
         logit = model(batch_x)
@@ -129,9 +133,26 @@ def test(model:MyNBeatsModel, test_x, test_y):
             pred = np.argmax(ls, axis=-1)
             acc = accuracy_score(by, pred)
             acc_nday.append(acc)
+        
+        overall_acc.append(acc_nday)
 
-    return acc_nday
+    overall_acc = np.array(overall_acc)
+    acc_avg = np.mean(overall_acc, axis=0)
 
+    return acc_avg
+
+def predict(model:MyNBeatsModel, x):
+    model.eval()
+
+    x = torch.from_numpy(x).to(DEVICE)
+    logit = model(x)
+
+    logit_stack = []
+    for batch_logit in logit:
+        b_numpy = batch_logit.detach().cpu().numpy()
+        logit_stack.append(b_numpy)
+
+    return logit_stack
 
 def main():
     # Load data
@@ -206,8 +227,17 @@ def main():
     )
     model.to(DEVICE)
 
+    # Load
+    # print("Loading model from {}".format(SAVEPATH), file=sys.stderr)
+    # model = torch.load(SAVEPATH)
+    # model.to(DEVICE)
+
     # Train
-    # train(model, train_x, train_y, epoch=10, lr=1e-4, batchsize=32) # Hypter parameter
+    train(model, train_x, train_y, epoch=10, lr=1e-4, batchsize=32) # Hypter parameter
+
+    # Save
+    print("Saving model to {}".format(SAVEPATH), file=sys.stderr)
+    torch.save(model, SAVEPATH)
 
     # Test
     acc_nday = test(model, test_x, test_y)
