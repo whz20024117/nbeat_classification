@@ -11,6 +11,8 @@ from torch import nn
 import os
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+STOCK_SCALER = None
+COV_SCALER = None
 
 def timeseries_to_numpy(target_ts, cov_ts):
     # Shape: N, variable, feature
@@ -20,6 +22,9 @@ def timeseries_to_numpy(target_ts, cov_ts):
     return np.concatenate([target_numpy, cov_numpy], 1)
     
 def preprocess_data(hourly_data):
+    global STOCK_SCALER
+    global COV_SCALER
+
     # Some dirty processing
     cov_cols = list(hourly_data['A'].columns)
     cov_cols.remove('Date')
@@ -52,10 +57,12 @@ def preprocess_data(hourly_data):
         temp_stock_scaler = Scaler()
         temp_stock_ts_scaled = temp_stock_scaler.fit_transform(temp_stock_ts)
         train_stock, val_stock = temp_stock_ts_scaled.split_before(len(temp_stock_ts_scaled)-50)
+        STOCK_SCALER = temp_stock_scaler
         
         temp_cov_scaler = Scaler()
         stack_cov_scaled = temp_cov_scaler.fit_transform(stack_cov)
         train_cov, val_cov = stack_cov_scaled.split_before(len(stack_cov_scaled)-50)
+        COV_SCALER = temp_cov_scaler
         
         # stock_ts[name] = temp_stock_ts_scaled
         train_stock_ts[name] = train_stock

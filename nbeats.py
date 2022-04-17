@@ -69,7 +69,7 @@ class MyNBeatsModel(nn.Module):
             self.stacks_list = [trend_stack, seasonality_stack]
 
         self.stacks = nn.ModuleList(self.stacks_list)
-        self.output = nn.Linear(self.target_length * self.nr_params, 4) # dec, slight dec, slight inc, inc
+        self.output = nn.Linear(self.target_length * self.nr_params, 3) # dec, slight dec/slight inc, inc
 
         # setting the last backcast "branch" to be not trainable (without next block/stack, it doesn't need to be
         # backpropagated). Removing this lines would cause logtensorboard to crash, since no gradient is stored
