@@ -148,14 +148,12 @@ def create_data_and_label(data, input_step, avg_n):
         _diff = _data_avg - _x[-1][0]
         _percentage_diff = _diff / (_x[-1][0] + 1e-6)  # We assume first var is Close. Avoid zero division
 
-        if _percentage_diff < -0.25:
+        if _percentage_diff <= -0.05:
             y.append(0)
-        elif _percentage_diff < 0 and _percentage_diff > -0.25:
+        elif _percentage_diff < 0.05 and _percentage_diff > -0.05:
             y.append(1)
-        elif _percentage_diff > 0 and _percentage_diff < 0.25:
-            y.append(2)
         else:
-            y.append(3)
+            y.append(2)
 
     return np.array(x), np.array(y)
 
