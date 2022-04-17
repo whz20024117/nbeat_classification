@@ -45,7 +45,7 @@ def preprocess_data(hourly_data):
     cov_scaler = {}
     for name, base_data in hourly_data.items():
         temp_stock_df = base_data['Close'].copy()
-        if len(temp_stock_df) == 0:
+        if len(temp_stock_df) <= 200:
             continue
         temp_stock_ts = TimeSeries.from_series(temp_stock_df)
         for cov_name in cov_cols:
@@ -195,8 +195,8 @@ def main():
         train_x.append(_x)
         train_y.append(_y)
 
-    train_x = np.concatenate(train_x, 0, dtype=np.float32)
-    train_y = np.concatenate(train_y, 0, dtype=int)
+    train_x = np.concatenate(train_x, 0).astype(np.float32)
+    train_y = np.concatenate(train_y, 0).astype(int)
 
     # Create testing data that ready to feed into model
     test_x = []
