@@ -1,0 +1,10 @@
+/.vscode
+/Get_AAPL.ipynb
+/S&P500-Info.csv
+/S&P500-Symbols.csv
+/__pycache__
+/darts_data
+/fed_funds.csv
+/get_darts_data.ipynb
+/sp500_overall.csv
+/train_nbeats.ipynb
