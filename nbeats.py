@@ -10,7 +10,7 @@ class MyNBeatsModel(nn.Module):
         input_chunk_length: int,
         output_chunk_length: int, # Length of output of original Nbeats model to set up stacks
         input_dim: int,
-        nr_params: int,
+        nr_params: int = 1,
         generic_architecture: bool = True,
         num_stacks: int = 30,
         num_blocks: int = 1,
@@ -20,11 +20,12 @@ class MyNBeatsModel(nn.Module):
         trend_polynomial_degree: int = 2,
     ):
         super().__init__()
+        self.loss_fn = nn.CrossEntropyLoss()
 
         self.input_dim = input_dim
         self.nr_params = nr_params
         self.input_chunk_length = input_chunk_length
-        self.output_chunk_length = output_chunk_length
+        self.output_chunk_length = output_chunk_length # Output_chunk_length is also nday
         self.input_chunk_length_multi = self.input_chunk_length * input_dim
         self.target_length = self.output_chunk_length * input_dim
         
@@ -69,13 +70,17 @@ class MyNBeatsModel(nn.Module):
             self.stacks_list = [trend_stack, seasonality_stack]
 
         self.stacks = nn.ModuleList(self.stacks_list)
-        self.output = nn.Linear(self.target_length * self.nr_params, 3) # dec, slight dec/slight inc, inc
 
         # setting the last backcast "branch" to be not trainable (without next block/stack, it doesn't need to be
         # backpropagated). Removing this lines would cause logtensorboard to crash, since no gradient is stored
         # on this params (the last block backcast is not part of the final output of the net).
         self.stacks_list[-1].blocks[-1].backcast_linear_layer.requires_grad_(False)
         self.stacks_list[-1].blocks[-1].backcast_g.requires_grad_(False)
+
+        # Output
+        self.output_list = []
+        for _ in range(output_chunk_length): # nday
+            self.output_list.append(nn.Linear(self.target_length * self.nr_params, 3)) # dec, slight dec/slight inc, inc
 
 
     def forward(self, x):
@@ -106,23 +111,38 @@ class MyNBeatsModel(nn.Module):
             x = stack_residual
 
         y = y.view(y.shape[0], -1)
-        y = self.output(y)
-        y = F.softmax(y)
 
-        return y
+        y_list = []
+        for output_layer in self.output_list:
+            y_list.append( F.softmax(output_layer(y)) )
+
+        return y_list
+
+    def get_loss(self, y_list, target_list):
+        losses = []
+        for _y, _t in zip(y_list, target_list):
+            losses.append(self.loss_fn(_y, _t))
+        
+        return torch.mean(torch.stack(losses))
+
 
 def generate_batch(x, y, bs):
     if (len(x) != len(y)):
         raise ValueError("X and Y should contain same number of samples")
     
     batches = []
+    # y shape : N, nday
     for i in range(0, len(x), bs):
-        batches.append((x[i:i + bs], y[i:i + bs]))
+        y_batch = y[i:i + bs]
+        y_list = []
+        for day in range(y_batch.shape[1]):
+            y_list.append(y_batch[:, day])
+        batches.append((x[i:i + bs], y_list))
     
     for batch in batches:
         yield batch
 
-def create_data_and_label(data, input_step, avg_n):
+def create_data_and_label(data, input_step, nday):
     """
     Prepare the data for the model.
     Parameters:
@@ -136,24 +156,28 @@ def create_data_and_label(data, input_step, avg_n):
     
     x = []
     y = []
-    for i in range(input_step, len(data) - avg_n):
+    for i in range(input_step, len(data) - nday):
         # Data
         _x = data[i - input_step:i]
         x.append(_x)
 
         # Label
-        _data_to_avg = data[i:i + avg_n]
-        _data_avg = np.mean(_data_to_avg[:, 0]) # We assume first var is Close
+        _data_to_nday = data[i:i + nday]
+        _data_nday_close = _data_to_nday[:, 0] # We assume first var is Close
 
-        _diff = _data_avg - _x[-1][0]
-        _percentage_diff = _diff / (_x[-1][0] + 1e-6)  # We assume first var is Close. Avoid zero division
+        _y = []
+        for _d in _data_nday_close:
+            _diff = _d - _x[-1][0]
+            _percentage_diff = _diff / (_x[-1][0] + 1e-6)  # We assume first var is Close. Avoid zero division
 
-        if _percentage_diff <= -0.05:
-            y.append(0)
-        elif _percentage_diff < 0.05 and _percentage_diff > -0.05:
-            y.append(1)
-        else:
-            y.append(2)
+            if _percentage_diff <= -0.05:
+                _y.append(0)
+            elif _percentage_diff < 0.05 and _percentage_diff > -0.05:
+                _y.append(1)
+            else:
+                _y.append(2)
+        
+        y.append(_y)
 
     return np.array(x), np.array(y)
 

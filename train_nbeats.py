@@ -76,9 +76,8 @@ def preprocess_data(hourly_data):
 
     return train_stock_ts, test_stock_ts, train_cov_ts, test_cov_ts
 
-def train(model:nn.Module, train_x, train_y, epoch, lr, batchsize):
+def train(model:MyNBeatsModel, train_x, train_y, epoch, lr, batchsize):
     optimizer = torch.optim.Adam(lr=lr, params=model.parameters())
-    loss_fn = nn.CrossEntropyLoss()
     n_sample = len(train_x)
     assert n_sample == len(train_y)
 
@@ -92,11 +91,10 @@ def train(model:nn.Module, train_x, train_y, epoch, lr, batchsize):
             optimizer.zero_grad()
             batch_x = torch.from_numpy(batch_x)
             batch_x.to(DEVICE)
-            batch_y = torch.from_numpy(batch_y)
-            batch_y.to(DEVICE)
+            batch_y = [torch.from_numpy(_y).to(DEVICE) for _y in batch_y]
             logit = model(batch_x)
 
-            loss = loss_fn(logit.softmax(dim=-1), batch_y)
+            loss = model.get_loss(logit, batch_y)
             if iteration % 4 == 0:
                 print(
                     "{}/{}: current loss is {:.6f}".format(batchsize*iteration, n_sample, loss.item()),
@@ -144,14 +142,14 @@ def main():
 
     # Set Hyper-parameters
     input_step = 30
-    avg_n = 7
+    nday = 5
     input_dim = train_stock_numpys[0].shape[1]
 
     # Create training data that ready to feed into model
     train_x = []
     train_y = []
     for com_seq in train_stock_numpys:
-        _x, _y = create_data_and_label(com_seq.squeeze(-1), input_step=input_step, avg_n=avg_n)
+        _x, _y = create_data_and_label(com_seq.squeeze(-1), input_step=input_step, nday=nday)
         train_x.append(_x)
         train_y.append(_y)
 
@@ -163,7 +161,7 @@ def main():
     
     model = MyNBeatsModel(
         input_chunk_length=input_step,
-        output_chunk_length=avg_n,
+        output_chunk_length=nday,
         input_dim=input_dim,
         nr_params=1,
         generic_architecture=True,
