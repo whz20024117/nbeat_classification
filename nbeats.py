@@ -83,6 +83,9 @@ class MyNBeatsModel(nn.Module):
         self.output_list = []
         for _ in range(output_chunk_length): # nday
             self.output_list.append(nn.Linear(self.target_length * self.nr_params, 3)) # dec, slight dec/slight inc, inc
+        
+        # Register
+        self.outputs_reg = nn.ModuleList(self.output_list)
 
 
     def forward(self, x):
@@ -102,8 +105,8 @@ class MyNBeatsModel(nn.Module):
             dtype=x.dtype,
         )
 
-        for stack in self.stacks_list:
-            # compute stack output
+        for stack in self.stacks:
+            # compute stack outputa
             stack_residual, stack_forecast = stack(x)
 
             # add stack forecast to final output
@@ -115,7 +118,7 @@ class MyNBeatsModel(nn.Module):
         y = y.view(y.shape[0], -1)
 
         y_list = []
-        for output_layer in self.output_list:
+        for output_layer in self.outputs_reg:
             y_list.append( F.softmax(output_layer(y), dim=-1) )
 
         return y_list
